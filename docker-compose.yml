@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: marketing_db
+    environment:
+      POSTGRES_USER: marketing_user
+      POSTGRES_PASSWORD: marketing_pass
+      POSTGRES_DB: marketing_ab_test
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./sql/02_seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - marketing_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marketing_user -d marketing_ab_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  analysis:
+    build: .
+    container_name: marketing_analysis
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: marketing_user
+      DB_PASSWORD: marketing_pass
+      DB_NAME: marketing_ab_test
+    volumes:
+      - ./output:/app/output
+      - ./data:/app/data
+    networks:
+      - marketing_network
+
+  adminer:
+    image: adminer:latest
+    container_name: marketing_adminer
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - marketing_network
+
+networks:
+  marketing_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
